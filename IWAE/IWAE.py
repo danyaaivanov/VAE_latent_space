@@ -2,7 +2,7 @@ from model_layers import ConvEncoder, ConvDecoder
 import torch
 import torch.nn as nn
 from torch.distributions import Normal, Independent
-
+import numpy as np
 
 
 def get_normal_KL(mean_1, log_std_1, mean_2=None, log_std_2=None):
@@ -77,13 +77,14 @@ class IWAE(nn.Module):
         # recon_loss = -torch.mean(torch.logsumexp(x_z.log_prob(torch.tile(x, dims = [self.K, 1, 1, 1, 1])).sum([-1, -2, -3]), 0))
 
         mu_x, mu_z, log_std_x, log_std_z, sample_z = self.forward(x, train = True)
-        recon_loss = torch.logsumexp(get_normal_nll(x, mu_x, log_std_x).sum([-1, -2, -3]), 0).mean()
-        kl_loss = torch.logsumexp(get_normal_KL(mu_z, log_std_z).sum(-1), 0).mean()
+
+        recon_loss = get_normal_nll(x, mu_x, log_std_x).sum([-1, -2, -3])
+        kl_loss = get_normal_KL(mu_z, log_std_z).sum(-1)
 
         return {
-            'elbo_loss': recon_loss + self.beta*kl_loss,
-            'recon_loss': recon_loss,
-            'kl_loss': kl_loss
+            'elbo_loss': torch.logsumexp(recon_loss + self.beta*kl_loss,0).mean()
+            # 'recon_loss': recon_loss,
+            # 'kl_loss': kl_loss
         }
 
     def sample(self, n):
