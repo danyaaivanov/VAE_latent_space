@@ -4,6 +4,29 @@ import torch.nn as nn
 from torch.distributions import Normal, Independent
 
 
+
+def get_normal_KL(mean_1, log_std_1, mean_2=None, log_std_2=None):
+
+    if mean_2 is None:
+        mean_2 = torch.zeros_like(mean_1)
+    if log_std_2 is None:
+        log_std_2 = torch.zeros_like(log_std_1)
+
+    first = 1 / torch.exp(log_std_2) ** 2 * torch.exp(log_std_1) ** 2
+
+    second = (mean_2 - mean_1) * (1 / torch.exp(log_std_2) ** 2) * (mean_2 - mean_1)
+
+    third = 1
+
+    fourth = torch.log((torch.exp(log_std_2) ** 2) / (torch.exp(log_std_1) ** 2))
+
+    return 1/2 * (first + second - third + fourth)
+
+def get_normal_nll(x, mean, log_std):
+
+    return log_std + 0.5 * torch.log(torch.tensor(2) * np.pi) + (x - mean) * torch.exp(-2 * log_std) / 2 * (x - mean)
+
+
 class IWAE(nn.Module):
     def __init__(self, input_shape, n_latent, K = 1, beta =1, device = 'cuda'):
         super().__init__()
@@ -15,8 +38,7 @@ class IWAE(nn.Module):
         self.K = K
         self.beta = beta
         self.encoder = ConvEncoder(self.input_shape, self.n_latent)
-        output_shape = [input_shape[0]*2, input_shape[1], input_shape[2]]
-        self.decoder = ConvDecoder(self.n_latent, output_shape)
+        self.decoder = ConvDecoder(self.n_latent, self.input_shape)
 
     def prior(self, n, use_cuda=True):
 
@@ -32,26 +54,31 @@ class IWAE(nn.Module):
             z = q_z.rsample(torch.Size([self.K]))  #[K, Batch, latent]
         else:
             z = q_z.rsample()
-        mu_x, log_std_x = self.decoder(z.view(-1, self.n_latent)).view(self.K, *x.shape).chunk(2, dim = 1) #should std also be separate entity?
+        mu_x = self.decoder(z.view(-1, self.n_latent)).view(self.K, *x.shape) #should std also be separate entity?
+        log_std_x = torch.zeros_like(mu_x)
         return mu_x, mu_z, log_std_x, log_std_z, z
 
 
     def loss(self, x):
-        mu_x, mu_z, log_std_x, log_std_z, z = self.forward(x, train = True)
-        pz = Independent(Normal(loc=torch.zeros_like(mu_z).to(self.device),
-                            scale=torch.zeros_like(log_std_z).exp().to(self.device)),
-                     reinterpreted_batch_ndims=1)
-        qz_x = Independent(Normal(loc=mu_z,
-                              scale=torch.exp(log_std_z).to(self.device)),
-                       reinterpreted_batch_ndims=1)
+        # mu_x, mu_z, log_std_x, log_std_z, z = self.forward(x, train = True)
+        # pz = Independent(Normal(loc=torch.zeros_like(mu_z).to(self.device),
+        #                     scale=torch.zeros_like(log_std_z).exp().to(self.device)),
+        #              reinterpreted_batch_ndims=1)
+        # qz_x = Independent(Normal(loc=mu_z,
+        #                       scale=torch.exp(log_std_z).to(self.device)),
+        #                reinterpreted_batch_ndims=1)
 
-        kl_loss = torch.mean(torch.logsumexp(qz_x.log_prob(z) - pz.log_prob(z), 0))
+        # kl_loss = torch.mean(torch.logsumexp(qz_x.log_prob(z) - pz.log_prob(z), 0))
 
-        x_z = Independent(Normal(loc=mu_x,
-                              scale=torch.exp(log_std_x)), #torch.zeros_like(mu_x)
-                       reinterpreted_batch_ndims=0)
+        # x_z = Independent(Normal(loc=mu_x,
+        #                       scale=torch.exp(log_std_x)),
+        #                reinterpreted_batch_ndims=0)
         
-        recon_loss = -torch.mean(torch.logsumexp(x_z.log_prob(torch.tile(x, dims = [self.K, 1, 1, 1, 1])).sum([-1, -2, -3]), 0))
+        # recon_loss = -torch.mean(torch.logsumexp(x_z.log_prob(torch.tile(x, dims = [self.K, 1, 1, 1, 1])).sum([-1, -2, -3]), 0))
+
+        mu_x, mu_z, log_std_x, log_std_z, sample_z = self.forward(x, train = True)
+        recon_loss = torch.logsumexp(get_normal_nll(x, mu_x, log_std_x).sum([-1, -2, -3]), 0).mean()
+        kl_loss = torch.logsumexp(get_normal_KL(mu_z, log_std_z).sum(-1), 0).mean()
 
         return {
             'elbo_loss': recon_loss + self.beta*kl_loss,
