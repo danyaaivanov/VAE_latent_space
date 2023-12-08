@@ -6,4 +6,4 @@ Project of team "Imaginary Talk", devoted to explore latent space of several VAE
 * VAE with VampPrior
   <img src="imgs/VampPrior_reconstructions.jpg" alt="drawing" width="200"/>
   <img src="imgs/VampPrior_samples.jpg" alt="drawing" width="200"/>
-  <img src="imgs/VampPrior_interpolation.jpg.jpg" alt="drawing" width="200"/>
+  <img src="imgs/VampPrior_interpolations.jpg.jpg" alt="drawing" width="200"/>
