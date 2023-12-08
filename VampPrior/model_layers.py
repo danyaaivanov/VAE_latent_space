@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 
 n_linear = lambda size: reduce(lambda x, y: x * y, size)
-NORM_LAYER = nn.InstanceNorm2d
+NORM_LAYER = nn.BatchNorm2d
 
 class ConvEncoder(nn.Module):
     def __init__(self, input_shape, n_latent):
