@@ -1,5 +1,5 @@
 # VAE latent space
-Project of team "Imaginary Talk", devoted to explore latent space of several VAE models:
+Project of team "Imaginary Talk", devoted to exploration of latent space of several VAE models:
 
 * Ordinary VAE
 * IWAE
